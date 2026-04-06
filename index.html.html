@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Instacart Nano — Interactive Prototype</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+
+html, body {
+  height: 100%;
+  background: #e8e8e8;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+/* Shell is a plain block — browser scrolls through it naturally */
+.phone-shell {
+  width: 390px;
+  min-height: 100vh;
+  background: #fff;
+  position: relative;
+}
+
+/* Tracking screen: fixed overlay, slides in from right */
+#screen-tracking {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%) translateX(24px);
+  width: 390px;
+  height: 100vh;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.38s ease, transform 0.38s ease;
+  z-index: 10;
+}
+#screen-tracking.visible {
+  opacity: 1;
+  pointer-events: all;
+  transform: translateX(-50%) translateX(0px);
+}
+
+/* Order placed overlay */
+#order-overlay {
+  position: fixed;
+  top: 0; left: 50%; transform: translateX(-50%);
+  width: 390px; height: 100%;
+  background: rgba(255,255,255,0.97);
+  z-index: 200;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 18px;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+#order-overlay.show { opacity: 1; pointer-events: all; }
+.checkmark-circle {
+  width: 80px; height: 80px; border-radius: 50%; background: #00A650;
+  display: flex; align-items: center; justify-content: center;
+  transform: scale(0);
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.checkmark-circle.pop { transform: scale(1); }
+.overlay-title { font-size: 20px; font-weight: 700; color: #1a1a1a; text-align: center; opacity: 0; transform: translateY(8px); transition: opacity 0.3s ease 0.25s, transform 0.3s ease 0.25s; }
+.overlay-title.show { opacity: 1; transform: translateY(0); }
+.overlay-sub { font-size: 14px; color: #888; text-align: center; max-width: 260px; line-height: 1.5; opacity: 0; transform: translateY(8px); transition: opacity 0.3s ease 0.38s, transform 0.3s ease 0.38s; }
+.overlay-sub.show { opacity: 1; transform: translateY(0); }
+.overlay-dots { display: flex; gap: 6px; margin-top: 4px; opacity: 0; transition: opacity 0.3s ease 0.5s; }
+.overlay-dots.show { opacity: 1; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: #00A650; }
+.dot:nth-child(1) { animation: bounce 1.2s 0.55s ease-in-out infinite; }
+.dot:nth-child(2) { animation: bounce 1.2s 0.70s ease-in-out infinite; }
+.dot:nth-child(3) { animation: bounce 1.2s 0.85s ease-in-out infinite; }
+@keyframes bounce { 0%,80%,100%{transform:translateY(0);}40%{transform:translateY(-6px);} }
+
+/* ── CHECKOUT STYLES ── */
+.topbar { display: flex; align-items: center; justify-content: center; padding: 12px 16px; position: relative; border-bottom: 1px solid #f0f0f0; background: #fff; }
+.back-btn { position: absolute; left: 16px; width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid #ddd; display: flex; align-items: center; justify-content: center; background: #fff; cursor: pointer; }
+.sprouts-logo { font-size: 13px; font-weight: 700; color: #00843D; letter-spacing: 0.5px; display: flex; align-items: center; gap: 4px; }
+.section { padding: 16px; border-bottom: 1px solid #f0f0f0; }
+.section-label { font-size: 13px; color: #666; margin-bottom: 4px; }
+.address-row { display: flex; align-items: center; justify-content: space-between; }
+.address-text { font-size: 15px; font-weight: 600; color: #1a1a1a; flex: 1; }
+.address-sub { font-size: 13px; color: #00A650; margin-top: 2px; }
+.delivery-section { padding: 16px; }
+.delivery-title { font-size: 17px; font-weight: 700; margin-bottom: 12px; }
+.nano-option { border: 2px solid #00A650; border-radius: 12px; padding: 14px; margin-bottom: 10px; background: #F0FAF4; position: relative; cursor: pointer; }
+.recommended-badge { position: absolute; top: -10px; left: 14px; background: #00A650; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; letter-spacing: 0.3px; }
+.option-row { display: flex; align-items: flex-start; justify-content: space-between; }
+.option-left { display: flex; align-items: flex-start; gap: 10px; flex: 1; }
+.option-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: #00A650; }
+.option-info { flex: 1; }
+.option-name { font-size: 15px; font-weight: 700; color: #1a1a1a; }
+.option-name span { color: #00A650; }
+.option-time { font-size: 13px; color: #555; margin-top: 2px; }
+.option-desc { font-size: 12px; color: #666; margin-top: 4px; }
+.option-price { font-size: 15px; font-weight: 700; color: #1a1a1a; white-space: nowrap; margin-left: 8px; }
+.no-tip-badge { display: inline-block; background: #E6F5EC; color: #00843D; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 6px; margin-top: 5px; border: 1px solid #b3dfc3; }
+.selected-dot { width: 20px; height: 20px; border-radius: 50%; background: #00A650; border: 2px solid #00A650; flex-shrink: 0; display: flex; align-items: center; justify-content: center; margin-top: 2px; }
+.selected-dot::after { content: ''; width: 8px; height: 8px; background: #fff; border-radius: 50%; }
+.standard-option { border: 1.5px solid #ddd; border-radius: 12px; padding: 14px; margin-bottom: 10px; background: #fff; cursor: pointer; }
+.unselected-dot { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #ccc; flex-shrink: 0; margin-top: 2px; }
+.thick-divider { height: 8px; background: #f5f5f5; }
+.membership-section { padding: 14px 16px; border-bottom: 1px solid #f0f0f0; }
+.membership-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.ic-logo-small { background: #F26B21; color: #fff; font-size: 11px; font-weight: 900; padding: 3px 6px; border-radius: 4px; }
+.membership-save { font-size: 14px; font-weight: 600; }
+.membership-save span { color: #F26B21; font-weight: 800; }
+.membership-sub { font-size: 12px; color: #666; }
+.card-input { border: 1.5px solid #ddd; border-radius: 8px; padding: 11px 14px; font-size: 15px; color: #aaa; margin-bottom: 8px; width: 100%; }
+.link-btn { width: 100%; border: 1.5px solid #ddd; border-radius: 8px; padding: 11px; font-size: 15px; font-weight: 600; color: #888; background: #fff; text-align: center; cursor: pointer; }
+.join-link { font-size: 13px; margin-top: 8px; }
+.join-link a { color: #00A650; text-decoration: none; font-weight: 600; }
+.summary-section { padding: 16px; }
+.summary-title { font-size: 17px; font-weight: 700; margin-bottom: 14px; }
+.summary-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 14px; }
+.summary-row.total { font-weight: 700; font-size: 16px; border-top: 1px solid #eee; padding-top: 12px; margin-top: 4px; }
+.summary-value.green { color: #00A650; font-weight: 600; }
+.savings-banner { background: #E6F5EC; border-radius: 10px; padding: 11px 14px; display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+.savings-text { font-size: 14px; font-weight: 600; color: #00843D; }
+.pay-section { padding: 16px; border-top: 1px solid #f0f0f0; }
+.pay-row { display: flex; align-items: center; justify-content: space-between; }
+.pay-left { display: flex; align-items: center; gap: 10px; }
+.gpay-icon { width: 44px; height: 28px; border: 1.5px solid #ddd; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #555; background: #fff; }
+.pay-label { font-size: 14px; }
+.pay-label span { display: block; font-size: 12px; color: #888; }
+.pay-amount { font-size: 15px; font-weight: 700; }
+.add-payment { color: #00A650; font-size: 14px; font-weight: 600; }
+.fine-print { padding: 0 16px 16px; font-size: 12px; color: #888; line-height: 1.5; }
+.fine-print a { color: #00A650; text-decoration: none; }
+.info-icon { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid #aaa; color: #aaa; font-size: 10px; font-weight: 700; margin-left: 3px; vertical-align: middle; cursor: pointer; }
+
+/* KEY FIX: sticky inside normal scroll flow */
+.continue-section {
+  position: sticky;
+  bottom: 0;
+  background: #fff;
+  border-top: 1px solid #f0f0f0;
+  padding: 12px 16px 28px;
+  z-index: 50;
+}
+.continue-btn {
+  width: 100%; background: #00A650; color: #fff;
+  font-size: 17px; font-weight: 700; padding: 16px;
+  border-radius: 50px; border: none; cursor: pointer; letter-spacing: 0.2px;
+  transition: transform 0.1s, background 0.1s;
+}
+.continue-btn:active { transform: scale(0.98); background: #008f45; }
+
+/* ── TRACKING STYLES ── */
+.map-container { position: relative; width: 100%; height: 270px; overflow: hidden; background: #e8f0e4; flex-shrink: 0; }
+.map-back { position: absolute; top: 50px; left: 16px; z-index: 20; width: 36px; height: 36px; border-radius: 50%; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.18); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.status-bar-track { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px 6px; font-size: 12px; font-weight: 600; color: #1a1a1a; position: absolute; top: 0; left: 0; width: 100%; z-index: 10; }
+.status-icons { display: flex; align-items: center; gap: 5px; }
+.bottom-sheet { flex: 1; background: #fff; border-radius: 20px 20px 0 0; margin-top: -20px; position: relative; z-index: 5; box-shadow: 0 -2px 20px rgba(0,0,0,0.08); display: flex; flex-direction: column; overflow: hidden; }
+.pull-handle { width: 36px; height: 4px; background: #ddd; border-radius: 2px; margin: 10px auto 0; }
+.status-card { padding: 16px 20px 0; }
+.status-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.status-headline { font-size: 17px; font-weight: 700; color: #1a1a1a; flex: 1; line-height: 1.25; }
+.eta-badge { background: #E6F5EC; color: #00843D; font-size: 13px; font-weight: 700; padding: 5px 10px; border-radius: 20px; white-space: nowrap; margin-left: 12px; display: flex; align-items: center; gap: 4px; }
+.progress-wrap { margin: 14px 0 0; }
+.progress-labels { display: flex; justify-content: space-between; font-size: 11px; color: #999; margin-bottom: 5px; }
+.progress-track { height: 5px; background: #eee; border-radius: 10px; overflow: visible; position: relative; }
+.progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #00A650, #00c45f); border-radius: 10px; position: relative; }
+.progress-fill::after { content: ''; position: absolute; right: -5px; top: 50%; transform: translateY(-50%); width: 10px; height: 10px; background: #00A650; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1.5px #00A650; }
+.thin-divider { height: 1px; background: #f0f0f0; margin: 16px 20px 0; }
+.order-section { padding: 14px 20px 0; }
+.order-from { font-size: 13px; color: #888; margin-bottom: 10px; }
+.order-from strong { color: #333; font-weight: 600; }
+.items-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.item-chip { display: flex; align-items: center; gap: 6px; background: #f7f7f7; border-radius: 20px; padding: 6px 10px 6px 6px; font-size: 12.5px; font-weight: 500; color: #333; }
+.spacer { flex: 1; }
+.bottom-actions { padding: 16px 20px 32px; border-top: 1px solid #f0f0f0; }
+.unlock-btn { width: 100%; background: #ccc; color: #fff; font-size: 17px; font-weight: 700; padding: 16px; border-radius: 50px; border: none; cursor: not-allowed; letter-spacing: 0.2px; display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; transition: background 0.4s ease, transform 0.1s ease, box-shadow 0.4s ease; }
+.unlock-btn.active { background: #00A650; cursor: pointer; box-shadow: 0 4px 16px rgba(0,166,80,0.35); }
+.unlock-btn.active:active { transform: scale(0.98); background: #008f45; }
+.unlock-sub { text-align: center; font-size: 12.5px; color: #aaa; margin-bottom: 14px; transition: opacity 0.3s ease; }
+.help-link { text-align: center; font-size: 13.5px; color: #00A650; font-weight: 600; cursor: pointer; }
+
+@keyframes pulse-ring { 0%{opacity:0.3;transform:scale(1);}100%{opacity:0;transform:scale(1.6);} }
+.robot-pulse { animation: pulse-ring 1.8s ease-out infinite; transform-origin: 140px 77px; }
+@keyframes dash-move { to{stroke-dashoffset:-20;} }
+.route-animated { animation: dash-move 0.6s linear infinite; }
+
+@media (max-width: 430px) {
+  body { background: #fff; }
+  .phone-shell { width: 100%; }
+  #screen-tracking, #order-overlay { width: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="phone-shell">
+
+  <!-- SCREEN 1: CHECKOUT -->
+  <div id="screen-checkout">
+
+    <div class="topbar">
+      <div class="back-btn"><svg viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2.5" stroke-linecap="round"><polyline points="15,18 9,12 15,6"/></svg></div>
+      <div class="sprouts-logo">🌿 Sprouts Farmers Market</div>
+    </div>
+
+    <div class="section">
+      <div class="section-label">Deliver to</div>
+      <div class="address-row">
+        <div>
+          <div class="address-text">845 N Fairfax Ave, West Hollywood, CA</div>
+          <div class="address-sub">Leave at the door · Add instructions</div>
+        </div>
+        <div style="color:#999;font-size:18px;margin-left:8px;">›</div>
+      </div>
+    </div>
+
+    <div style="padding:10px 16px;background:#FFF8E7;border-bottom:1px solid #f0f0f0;font-size:13px;color:#5a4500;display:flex;align-items:flex-start;gap:8px;">
+      <span>🗓</span><span>Some delivery options are affected by store operating hours.</span>
+    </div>
+
+    <div class="delivery-section">
+      <div class="delivery-title">Delivery options</div>
+      <div class="nano-option">
+        <div class="recommended-badge">⚡ RECOMMENDED</div>
+        <div class="option-row">
+          <div class="option-left">
+            <div class="option-icon">
+              <svg width="22" height="22" viewBox="0 0 36 36" fill="none">
+                <line x1="18" y1="3" x2="18" y2="8" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                <circle cx="18" cy="3" r="2" fill="white"/>
+                <rect x="8" y="8" width="20" height="14" rx="4" fill="white" fill-opacity="0.95"/>
+                <circle cx="13" cy="14" r="2.5" fill="#00A650"/><circle cx="23" cy="14" r="2.5" fill="#00A650"/>
+                <circle cx="13.8" cy="13.2" r="1" fill="white"/><circle cx="23.8" cy="13.2" r="1" fill="white"/>
+                <rect x="13" y="18" width="10" height="2" rx="1" fill="#00A650" fill-opacity="0.6"/>
+                <rect x="10" y="23" width="16" height="9" rx="3" fill="white" fill-opacity="0.85"/>
+                <circle cx="12" cy="34" r="2" fill="white" fill-opacity="0.7"/><circle cx="24" cy="34" r="2" fill="white" fill-opacity="0.7"/>
+              </svg>
+            </div>
+            <div class="option-info">
+              <div class="option-name">Instacart <span>Nano</span></div>
+              <div class="option-time">Arrives in 30–45 min</div>
+              <div class="option-desc">Delivered by autonomous robot</div>
+              <div class="no-tip-badge">✓ No tip needed</div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+            <div class="selected-dot"></div>
+            <div class="option-price">$2.49</div>
+          </div>
+        </div>
+      </div>
+      <div class="standard-option">
+        <div class="option-row">
+          <div class="option-left">
+            <div class="option-icon" style="background:#f0f0f0;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+            </div>
+            <div class="option-info">
+              <div class="option-name" style="font-weight:600;color:#333;">Standard Delivery</div>
+              <div class="option-time">Arrives in 45–90 min</div>
+              <div class="option-desc">Delivered by Instacart shopper</div>
+              <div style="font-size:11.5px;color:#888;margin-top:4px;">$3.99 + service fee + tip</div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;"><div class="unselected-dot"></div></div>
+        </div>
+      </div>
+      <div style="border:1.5px solid #eee;border-radius:12px;padding:13px 14px;background:#fafafa;opacity:0.55;">
+        <div class="option-row">
+          <div class="option-left">
+            <span style="font-size:20px;">⚡</span>
+            <div class="option-info">
+              <div style="font-size:15px;font-weight:600;color:#aaa;">Priority</div>
+              <div style="font-size:13px;color:#bbb;">Unavailable</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="thick-divider"></div>
+
+    <div class="membership-section">
+      <div class="membership-row">
+        <div class="ic-logo-small">ic+</div>
+        <div>
+          <div class="membership-save">Save <span>$1.50</span> with membership</div>
+          <div class="membership-sub">Add an Instacart+ membership card.</div>
+        </div>
+      </div>
+      <div class="card-input">Card number</div>
+      <div class="link-btn">Link membership</div>
+      <div class="join-link">Not a member? <a href="#">Join now</a></div>
+    </div>
+
+    <div class="thick-divider"></div>
+
+    <div class="summary-section">
+      <div class="summary-title">Summary</div>
+      <div style="background:#F0FAF4;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px;color:#1a5c35;display:flex;align-items:center;gap:8px;">
+        <span>🤖</span><span><strong>No tip required</strong> for Nano autonomous delivery. 100% of any optional tip would go toward the Nano program.</span>
+      </div>
+      <div class="summary-row"><span>3 items</span><span>$14.27</span></div>
+      <div class="summary-row"><span>Nano delivery fee</span><span>$2.49</span></div>
+      <div class="summary-row"><span>Delivery tip</span><span class="summary-value green">$0.00</span></div>
+      <div class="summary-row"><span>Service fee <span class="info-icon">i</span></span><span>$1.99</span></div>
+      <div class="summary-row total"><span>Total</span><span>$18.75</span></div>
+      <div class="savings-banner"><span style="font-size:22px;">🏷️</span><span class="savings-text">You're saving $4.72 vs. standard delivery</span></div>
+    </div>
+
+    <div class="thick-divider"></div>
+
+    <div class="pay-section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <span style="font-size:17px;font-weight:700;">Pay with</span>
+        <span class="add-payment">Add payment</span>
+      </div>
+      <div class="pay-row">
+        <div class="pay-left">
+          <div class="gpay-icon">G Pay</div>
+          <div class="pay-label">Google Pay<span>Applied to remaining balance</span></div>
+        </div>
+        <div class="pay-amount">$18.75</div>
+      </div>
+    </div>
+
+    <div class="thick-divider"></div>
+
+    <div style="padding:14px 16px;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-size:14px;font-weight:600;">Offers and promo codes</div>
+        <div style="font-size:12px;color:#666;margin-top:2px;">Nano flat-rate delivery applied</div>
+      </div>
+      <div style="color:#999;font-size:18px;">›</div>
+    </div>
+
+    <div class="fine-print" style="padding-top:14px;">
+      <p>Instacart Nano autonomous delivery operates within a 1.5 mile radius using sidewalk robots. Delivery area may vary.</p><br>
+      <p>You accept full responsibility for the order once it's delivered. By clicking below, you agree to our <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>.</p>
+    </div>
+
+    <!-- Sticky button — rides naturally at the bottom of the scroll -->
+    <div class="continue-section">
+      <button class="continue-btn" id="continue-btn">Continue</button>
+    </div>
+
+  </div><!-- /screen-checkout -->
+
+
+  <!-- SCREEN 2: TRACKING -->
+  <div id="screen-tracking">
+    <div class="map-container">
+      <svg width="100%" height="270" viewBox="0 0 390 270" xmlns="http://www.w3.org/2000/svg">
+        <rect width="390" height="270" fill="#EBF2E8"/>
+        <line x1="0" y1="55" x2="390" y2="55" stroke="#fff" stroke-width="10"/>
+        <line x1="0" y1="100" x2="390" y2="100" stroke="#fff" stroke-width="7"/>
+        <line x1="0" y1="150" x2="390" y2="150" stroke="#fff" stroke-width="10"/>
+        <line x1="0" y1="195" x2="390" y2="195" stroke="#fff" stroke-width="7"/>
+        <line x1="0" y1="240" x2="390" y2="240" stroke="#fff" stroke-width="10"/>
+        <line x1="60" y1="0" x2="60" y2="270" stroke="#fff" stroke-width="7"/>
+        <line x1="130" y1="0" x2="130" y2="270" stroke="#fff" stroke-width="10"/>
+        <line x1="200" y1="0" x2="200" y2="270" stroke="#fff" stroke-width="7"/>
+        <line x1="270" y1="0" x2="270" y2="270" stroke="#fff" stroke-width="10"/>
+        <line x1="340" y1="0" x2="340" y2="270" stroke="#fff" stroke-width="7"/>
+        <text x="135" y="48" font-size="9" fill="#bbb" font-family="Helvetica,sans-serif">N La Brea Ave</text>
+        <text x="273" y="48" font-size="9" fill="#bbb" font-family="Helvetica,sans-serif">N Fairfax Ave</text>
+        <text x="8" y="148" font-size="9" fill="#bbb" font-family="Helvetica,sans-serif">Melrose Ave</text>
+        <text x="8" y="97" font-size="9" fill="#bbb" font-family="Helvetica,sans-serif">Beverly Blvd</text>
+        <rect x="61" y="56" width="68" height="43" fill="#dfeada" rx="1"/>
+        <rect x="131" y="56" width="68" height="43" fill="#dfeada" rx="1"/>
+        <rect x="201" y="56" width="68" height="43" fill="#dfeada" rx="1"/>
+        <rect x="271" y="56" width="68" height="43" fill="#dfeada" rx="1"/>
+        <rect x="61" y="101" width="68" height="48" fill="#dfeada" rx="1"/>
+        <rect x="201" y="101" width="68" height="48" fill="#dfeada" rx="1"/>
+        <rect x="271" y="101" width="68" height="48" fill="#dfeada" rx="1"/>
+        <rect x="61" y="151" width="68" height="43" fill="#dfeada" rx="1"/>
+        <rect x="131" y="151" width="68" height="43" fill="#dfeada" rx="1"/>
+        <rect x="201" y="151" width="68" height="43" fill="#dfeada" rx="1"/>
+        <rect x="271" y="151" width="68" height="43" fill="#dfeada" rx="1"/>
+        <rect x="61" y="196" width="68" height="43" fill="#dfeada" rx="1"/>
+        <rect x="131" y="196" width="68" height="43" fill="#dfeada" rx="1"/>
+        <rect x="201" y="196" width="68" height="43" fill="#dfeada" rx="1"/>
+        <rect x="271" y="196" width="68" height="43" fill="#dfeada" rx="1"/>
+        <rect x="131" y="101" width="68" height="48" fill="#c8e3bf" rx="2"/>
+        <text x="165" y="130" font-size="8.5" fill="#7aad6a" text-anchor="middle" font-family="Helvetica,sans-serif">Park</text>
+        <path d="M 140 77 L 200 77 L 200 150 L 270 150 L 270 195 L 310 195" stroke="#ccc" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <path id="completed-route" d="M 140 77 L 140 77" stroke="#00A650" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+        <path d="M 140 77 L 200 77 L 200 150 L 270 150 L 270 195 L 310 195" stroke="#00A650" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 5" class="route-animated" opacity="0.45"/>
+        <ellipse cx="140" cy="82" rx="7" ry="3" fill="rgba(0,0,0,0.12)"/>
+        <circle cx="140" cy="66" r="14" fill="#00A650"/>
+        <circle cx="140" cy="66" r="11" fill="#fff"/>
+        <text x="140" y="70" font-size="12" text-anchor="middle" font-family="Helvetica,sans-serif">🌿</text>
+        <polygon points="136,77 144,77 140,83" fill="#00A650"/>
+        <rect x="88" y="48" width="104" height="15" rx="7" fill="rgba(0,0,0,0.62)"/>
+        <text x="140" y="59" font-size="9.5" fill="#fff" text-anchor="middle" font-family="Helvetica,sans-serif" font-weight="600">Sprouts — La Brea Ave</text>
+        <ellipse cx="310" cy="202" rx="7" ry="3" fill="rgba(0,0,0,0.12)"/>
+        <circle cx="310" cy="186" r="14" fill="#fff" stroke="#00A650" stroke-width="2.5"/>
+        <text x="310" y="190" font-size="13" text-anchor="middle" font-family="Helvetica,sans-serif">🏠</text>
+        <polygon points="306,198 314,198 310,204" fill="#fff" stroke="#00A650" stroke-width="2" stroke-linejoin="round"/>
+        <rect x="262" y="168" width="96" height="15" rx="7" fill="rgba(0,0,0,0.62)"/>
+        <text x="310" y="179" font-size="9.5" fill="#fff" text-anchor="middle" font-family="Helvetica,sans-serif" font-weight="600">Your delivery</text>
+        <g id="robot-group">
+          <circle class="robot-pulse" cx="140" cy="77" r="14" fill="#00A650" opacity="0.15"/>
+          <circle cx="140" cy="77" r="13" fill="#00A650" stroke="#fff" stroke-width="2.5"/>
+          <line x1="140" y1="66" x2="140" y2="69" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+          <circle cx="140" cy="65.5" r="1.2" fill="white"/>
+          <rect x="133" y="69" width="14" height="9" rx="2.5" fill="white" fill-opacity="0.95"/>
+          <circle cx="136.5" cy="73" r="1.6" fill="#00A650"/><circle cx="143.5" cy="73" r="1.6" fill="#00A650"/>
+          <circle cx="137" cy="72.4" r="0.6" fill="white"/><circle cx="144" cy="72.4" r="0.6" fill="white"/>
+          <rect x="134" y="79" width="12" height="7" rx="2" fill="white" fill-opacity="0.85"/>
+          <circle cx="136" cy="87.5" r="1.5" fill="white" fill-opacity="0.75"/>
+          <circle cx="144" cy="87.5" r="1.5" fill="white" fill-opacity="0.75"/>
+        </g>
+        <defs>
+          <linearGradient id="mapFade" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#fff" stop-opacity="0"/>
+            <stop offset="100%" stop-color="#fff" stop-opacity="0.55"/>
+          </linearGradient>
+        </defs>
+        <rect x="0" y="200" width="390" height="70" fill="url(#mapFade)"/>
+      </svg>
+      <div class="map-back"><svg viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2.5" stroke-linecap="round" width="16" height="16"><polyline points="15,18 9,12 15,6"/></svg></div>
+      <div class="status-bar-track">
+        <span style="font-size:13px;font-weight:700;">3:44</span>
+        <div class="status-icons">
+          <svg width="16" height="12" viewBox="0 0 16 12" fill="#1a1a1a"><rect x="0" y="4" width="3" height="8" rx="0.5"/><rect x="4.5" y="2.5" width="3" height="9.5" rx="0.5"/><rect x="9" y="0.5" width="3" height="11.5" rx="0.5"/><rect x="13.5" y="0" width="2.5" height="12" rx="0.5" opacity="0.3"/></svg>
+          <svg width="15" height="12" viewBox="0 0 15 12" fill="none" stroke="#1a1a1a" stroke-width="1.5"><path d="M7.5 3C9.8 3 11.9 4 13.4 5.6M1.6 5.6C3.1 4 5.2 3 7.5 3"/><path d="M7.5 6.5C8.8 6.5 9.9 7 10.8 7.9M4.2 7.9C5.1 7 6.2 6.5 7.5 6.5"/><circle cx="7.5" cy="10.5" r="1" fill="#1a1a1a" stroke="none"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="#1a1a1a" stroke-opacity="0.35"/><rect x="2" y="2" width="15" height="8" rx="2" fill="#1a1a1a"/><path d="M23 4.5v3a1.5 1.5 0 000-3z" fill="#1a1a1a" opacity="0.4"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="bottom-sheet">
+      <div class="pull-handle"></div>
+      <div class="status-card">
+        <div class="status-header">
+          <div class="status-headline">Your Nano delivery<br>is on its way 🤖</div>
+          <div class="eta-badge">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00843D" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span id="eta-value">30 min away</span>
+          </div>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-labels"><span>Sprouts La Brea</span><span>Your door</span></div>
+          <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+        </div>
+      </div>
+      <div class="thin-divider"></div>
+      <div class="order-section">
+        <div class="order-from"><strong>3 items</strong> from Sprouts Farmers Market · <strong>$14.27</strong></div>
+        <div class="items-row">
+          <div class="item-chip"><span style="font-size:16px;">🍋</span> Limes</div>
+          <div class="item-chip"><span style="font-size:16px;">🌿</span> Cilantro</div>
+          <div class="item-chip"><span style="font-size:16px;">🥫</span> Diced Tomatoes</div>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <div class="bottom-actions">
+        <button class="unlock-btn" disabled>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Unlock delivery
+        </button>
+        <div class="unlock-sub">Available when your robot arrives</div>
+        <div class="help-link">Need help?</div>
+      </div>
+    </div>
+  </div><!-- /screen-tracking -->
+
+
+  <!-- ORDER PLACED OVERLAY -->
+  <div id="order-overlay">
+    <div class="checkmark-circle" id="checkmark-circle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" width="40" height="40"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <div class="overlay-title" id="overlay-title">Order placed!</div>
+    <div class="overlay-sub" id="overlay-sub">Your Nano robot is being assigned and will head your way shortly.</div>
+    <div class="overlay-dots" id="overlay-dots">
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+
+</div><!-- /phone-shell -->
+
+<script>
+const waypoints=[{x:140,y:77},{x:200,y:77},{x:200,y:150},{x:270,y:150},{x:270,y:195},{x:310,y:195}];
+function dist(a,b){return Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2);}
+let totalLen=0;const segLens=[];
+for(let i=0;i<waypoints.length-1;i++){const l=dist(waypoints[i],waypoints[i+1]);segLens.push(l);totalLen+=l;}
+
+function posAtT(t){
+  const target=t*totalLen;let acc=0;
+  for(let i=0;i<segLens.length;i++){
+    if(acc+segLens[i]>=target){const f=(target-acc)/segLens[i],a=waypoints[i],b=waypoints[i+1];return{x:a.x+(b.x-a.x)*f,y:a.y+(b.y-a.y)*f};}
+    acc+=segLens[i];
+  }
+  return waypoints[waypoints.length-1];
+}
+function pathTo(t){
+  const target=t*totalLen;let acc=0;
+  let d=`M ${waypoints[0].x} ${waypoints[0].y}`;
+  for(let i=0;i<segLens.length;i++){
+    if(acc+segLens[i]>=target){const f=(target-acc)/segLens[i],a=waypoints[i],b=waypoints[i+1];d+=` L ${(a.x+(b.x-a.x)*f).toFixed(1)} ${(a.y+(b.y-a.y)*f).toFixed(1)}`;break;}
+    else{acc+=segLens[i];d+=` L ${waypoints[i+1].x} ${waypoints[i+1].y}`;}
+  }
+  return d;
+}
+
+const DURATION=28000;
+let animStart=null,etaTimer=null,etaSecs=30*60;
+
+function onArrival(){
+  // Stop ETA countdown
+  clearInterval(etaTimer);
+  document.getElementById('eta-value').textContent='Arrived!';
+
+  // Update headline
+  document.querySelector('.status-headline').innerHTML='Your robot has arrived!&nbsp;🎉';
+
+  // Update ETA badge color to celebrate
+  const badge=document.querySelector('.eta-badge');
+  badge.style.background='#E6F5EC';
+
+  // Enable unlock button
+  const btn=document.querySelector('.unlock-btn');
+  btn.disabled=false;
+  btn.classList.add('active');
+
+  // Update subtext
+  const sub=document.querySelector('.unlock-sub');
+  sub.textContent='Tap to open your robot and collect your order';
+  sub.style.color='#333';
+  sub.style.fontWeight='500';
+}
+
+function tick(ts){
+  if(!animStart)animStart=ts;
+  const t=Math.min((ts-animStart)/DURATION,1);
+  const pos=posAtT(t);
+  document.getElementById('robot-group').setAttribute('transform',`translate(${(pos.x-140).toFixed(1)},${(pos.y-77).toFixed(1)})`);
+  document.getElementById('completed-route').setAttribute('d',pathTo(t));
+  document.getElementById('progress-fill').style.width=(t*100).toFixed(1)+'%';
+  if(t<1){
+    requestAnimationFrame(tick);
+  } else {
+    onArrival();
+  }
+}
+
+function startEta(){
+  const el=document.getElementById('eta-value');
+  etaTimer=setInterval(()=>{
+    etaSecs=Math.max(0,etaSecs-1);
+    const m=Math.floor(etaSecs/60),s=etaSecs%60;
+    el.textContent=m>0?`${m} min away`:s>0?`${s} sec away`:'Arriving now!';
+  },1000);
+}
+
+document.getElementById('continue-btn').addEventListener('click',()=>{
+  const overlay=document.getElementById('order-overlay');
+  overlay.classList.add('show');
+  setTimeout(()=>document.getElementById('checkmark-circle').classList.add('pop'),80);
+  setTimeout(()=>document.getElementById('overlay-title').classList.add('show'),300);
+  setTimeout(()=>document.getElementById('overlay-sub').classList.add('show'),450);
+  setTimeout(()=>document.getElementById('overlay-dots').classList.add('show'),580);
+
+  setTimeout(()=>{
+    const co=document.getElementById('screen-checkout');
+    co.style.transition='opacity 0.3s ease';
+    co.style.opacity='0';
+    co.style.pointerEvents='none';
+
+    document.getElementById('screen-tracking').classList.add('visible');
+
+    setTimeout(()=>{
+      overlay.style.transition='opacity 0.35s ease';
+      overlay.style.opacity='0';
+      setTimeout(()=>{overlay.style.display='none';},350);
+    },200);
+
+    setTimeout(()=>{animStart=null;requestAnimationFrame(tick);startEta();},400);
+  },2300);
+});
+</script>
+</body>
+</html>
